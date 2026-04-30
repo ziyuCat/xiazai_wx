@@ -1,0 +1,27 @@
+page {
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top left, #f8d8aa 0%, rgba(248, 216, 170, 0) 32%),
+    linear-gradient(180deg, #f4efe7 0%, #f7f4ee 48%, #f1ebe0 100%);
+  color: #2b2218;
+}
+
+view,
+text,
+button,
+input,
+textarea {
+  box-sizing: border-box;
+}
+
+button {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  line-height: 1.2;
+  padding: 0;
+}
+
+button::after {
+  border: none;
+}

@@ -1,0 +1,44 @@
+<view class="page-shell">
+  <view class="hero-shell">
+    <view class="hero-title">万能提取下载器</view>
+    <view class="hero-subtitle">首页只做输入，提取成功后直接跳详情页，无需往下滑。</view>
+  </view>
+
+  <view class="main-card">
+    <view class="notice-strip">复制抖音分享文案后，点击“一键粘贴”或直接输入</view>
+
+    <textarea
+      class="share-input"
+      maxlength="-1"
+      placeholder="请粘贴完整的抖音分享文案"
+      value="{{inputText}}"
+      bindinput="onInputChange"
+    />
+
+    <view class="input-actions">
+      <button class="ghost-btn" bindtap="onPasteTap">一键粘贴</button>
+      <button class="ghost-btn" bindtap="onResetTap">清空</button>
+    </view>
+
+    <button class="primary-btn" loading="{{loading}}" disabled="{{loading}}" bindtap="onExtractTap">
+      {{loading ? loadingText : '开始提取'}}
+    </button>
+
+    <view wx:if="{{errorMessage}}" class="error-banner">{{errorMessage}}</view>
+  </view>
+
+  <view class="shortcut-grid">
+    <view
+      wx:for="{{shortcuts}}"
+      wx:key="id"
+      class="shortcut-card"
+      data-action="{{item.id}}"
+      bindtap="onShortcutTap"
+    >
+      <view class="shortcut-title">{{item.title}}</view>
+      <view class="shortcut-desc">{{item.desc}}</view>
+    </view>
+  </view>
+
+  <view class="legal-text">视频版权归平台及作者所有，本应用不存储任何视频及图片内容。</view>
+</view>

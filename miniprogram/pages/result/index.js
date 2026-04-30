@@ -1,0 +1,574 @@
+const {
+  parseShareText,
+  fetchDetail,
+  prepareDownload,
+} = require("../../utils/api");
+
+const ERROR_MESSAGE_MAP = {
+  EMPTY_TEXT: "请输入抖音分享文案",
+  NO_URL_FOUND: "没找到可解析链接，请重新复制完整分享文案",
+  UNSUPPORTED_PLATFORM: "当前仅支持抖音分享链接",
+  CONTENT_UNAVAILABLE: "作品不存在、已删除或权限受限",
+  DETAIL_FETCH_FAILED: "当前作品暂时无法解析，请稍后重试",
+  ROUTER_DATA_NOT_FOUND: "当前作品暂时无法解析，请稍后重试",
+};
+
+function promisifyWx(method, options = {}) {
+  return new Promise((resolve, reject) => {
+    method({
+      ...options,
+      success: resolve,
+      fail: reject,
+    });
+  });
+}
+
+function formatDuration(durationMs) {
+  const parsed = Number(durationMs);
+  if (!parsed || Number.isNaN(parsed)) {
+    return "";
+  }
+
+  const normalizedMs = parsed < 1000 ? parsed * 1000 : parsed;
+  const totalSeconds = Math.max(1, Math.floor(normalizedMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return [minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
+}
+
+function formatCount(value) {
+  const count = Number(value) || 0;
+  if (count >= 10000) {
+    return `${(count / 10000).toFixed(count >= 100000 ? 0 : 1)}万`;
+  }
+  return `${count}`;
+}
+
+function buildQualityText(source) {
+  if (!source) {
+    return "";
+  }
+
+  const width = Number(source.width) || 0;
+  const height = Number(source.height) || 0;
+  if (height >= 1920 || width >= 1920) {
+    return "超清";
+  }
+  if (height >= 1080 || width >= 1080) {
+    return "1080P";
+  }
+  if (height >= 720 || width >= 720) {
+    return "720P";
+  }
+  if (width && height) {
+    return `${width} x ${height}`;
+  }
+  return "默认源";
+}
+
+function normalizeDetailResult(detailResult) {
+  const sources = Array.isArray(detailResult?.sources) ? detailResult.sources : [];
+  const images = Array.isArray(detailResult?.images) ? detailResult.images : [];
+  const cover = detailResult?.cover || images[0]?.downloadUrl || images[0]?.url || "";
+  const durationMs =
+    detailResult?.durationMs ||
+    sources[0]?.durationMs ||
+    sources.find((item) => item?.durationMs)?.durationMs ||
+    0;
+
+  return {
+    ...detailResult,
+    cover,
+    durationMs,
+    author: detailResult?.author || {},
+    sources,
+    images,
+  };
+}
+
+Page({
+  data: {
+    inputText: "",
+    parseResult: null,
+    detailResult: null,
+    resultTab: "video",
+    durationText: "",
+    statisticsText: "",
+    selectedSourceId: "",
+    selectedSourceMeta: null,
+    selectedSourceQuality: "",
+    selectedSourceIndexText: "",
+    selectedImageId: "",
+    selectedImagePreview: "",
+    selectedImageIndexText: "",
+    sourcePanelExpanded: false,
+    loading: false,
+    loadingText: "",
+    downloadTicket: null,
+    downloadProgressVisible: false,
+    downloadProgress: 0,
+    downloadProgressText: "",
+  },
+
+  onLoad() {
+    const app = getApp();
+    const currentWork = app.globalData.currentWork;
+
+    if (!currentWork?.detailResult) {
+      wx.showToast({
+        title: "请先返回首页提取内容",
+        icon: "none",
+      });
+      setTimeout(() => {
+        wx.reLaunch({
+          url: "/pages/index/index",
+        });
+      }, 300);
+      return;
+    }
+
+    this.applyWorkData({
+      inputText: currentWork.inputText || "",
+      parseResult: currentWork.parseResult || null,
+      detailResult: currentWork.detailResult,
+    });
+  },
+
+  applyWorkData({ inputText, parseResult, detailResult }) {
+    const normalizedDetail = normalizeDetailResult(detailResult);
+    const selectedSourceMeta = this.getDefaultSource(normalizedDetail);
+    const selectedImage = normalizedDetail.images[0] || null;
+
+    this.setData({
+      inputText: inputText || "",
+      parseResult: parseResult || null,
+      detailResult: normalizedDetail,
+      resultTab: normalizedDetail.mediaType === "note" ? "image" : "video",
+      durationText: formatDuration(normalizedDetail.durationMs),
+      statisticsText: this.buildStatisticsText(normalizedDetail.statistics),
+      selectedSourceId: selectedSourceMeta?.id || "",
+      selectedSourceMeta,
+      selectedSourceQuality: buildQualityText(selectedSourceMeta),
+      selectedSourceIndexText: this.buildSourceIndexText(
+        normalizedDetail,
+        selectedSourceMeta?.id || ""
+      ),
+      selectedImageId: selectedImage?.id || "",
+      selectedImagePreview:
+        selectedImage?.downloadUrl || selectedImage?.url || normalizedDetail.cover || "",
+      selectedImageIndexText: this.buildImageIndexText(normalizedDetail, selectedImage?.id || ""),
+      sourcePanelExpanded: false,
+      downloadTicket: null,
+      downloadProgressVisible: false,
+      downloadProgress: 0,
+      downloadProgressText: "",
+    });
+  },
+
+  getDefaultSource(detailResult) {
+    const sources = detailResult?.sources || [];
+    if (!sources.length) {
+      return null;
+    }
+
+    return (
+      sources.find((item) => {
+        const label = item?.label || "";
+        const id = item?.id || "";
+        return (
+          label.includes("无水印") ||
+          id.includes("nowm") ||
+          item?.watermark === "without_watermark" ||
+          item?.watermark === "unknown"
+        );
+      }) || sources[0]
+    );
+  },
+
+  buildStatisticsText(statistics) {
+    if (!statistics) {
+      return "";
+    }
+
+    return `点赞 ${formatCount(statistics.diggCount)}  收藏 ${formatCount(
+      statistics.collectCount
+    )}  评论 ${formatCount(statistics.commentCount)}`;
+  },
+
+  buildSourceIndexText(detailResult, sourceId) {
+    const sources = detailResult?.sources || [];
+    if (!sources.length) {
+      return "";
+    }
+
+    const index = sources.findIndex((item) => item.id === sourceId);
+    return `源 ${index >= 0 ? index + 1 : 1}/${sources.length}`;
+  },
+
+  buildImageIndexText(detailResult, imageId) {
+    const images = detailResult?.images || [];
+    if (!images.length) {
+      return "";
+    }
+
+    const index = images.findIndex((item) => item.id === imageId);
+    return `第 ${index >= 0 ? index + 1 : 1}/${images.length} 张`;
+  },
+
+  onShareInputChange(e) {
+    this.setData({
+      inputText: e.detail.value,
+    });
+  },
+
+  onClearInputTap() {
+    this.setData({
+      inputText: "",
+    });
+  },
+
+  async onPasteTap() {
+    try {
+      const res = await promisifyWx(wx.getClipboardData);
+      const text = res.data || "";
+      this.setData({
+        inputText: text,
+      });
+      if (text) {
+        wx.showToast({
+          title: "已粘贴剪贴板内容",
+          icon: "none",
+        });
+      }
+    } catch (error) {
+      wx.showToast({
+        title: "读取剪贴板失败",
+        icon: "none",
+      });
+    }
+  },
+
+  async onReExtractTap() {
+    const inputText = (this.data.inputText || "").trim();
+    if (!inputText) {
+      wx.showToast({
+        title: "请输入抖音分享文案",
+        icon: "none",
+      });
+      return;
+    }
+
+    this.setLoading(true, "正在重新提取");
+
+    try {
+      const parseResult = await parseShareText(inputText);
+      const resolved = parseResult?.resolved || {};
+      if (parseResult?.status !== "resolved" || !resolved.awemeId) {
+        throw {
+          code: "NO_URL_FOUND",
+          message: "没拿到作品 ID，请重新复制完整分享文案",
+        };
+      }
+
+      this.setLoading(true, "正在获取作品详情");
+      const detailResult = await fetchDetail(parseResult);
+
+      const app = getApp();
+      app.globalData.currentWork = {
+        inputText,
+        parseResult,
+        detailResult,
+      };
+
+      this.applyWorkData({
+        inputText,
+        parseResult,
+        detailResult,
+      });
+
+      wx.showToast({
+        title: "提取成功",
+        icon: "success",
+      });
+    } catch (error) {
+      wx.showToast({
+        title: this.getFriendlyMessage(error),
+        icon: "none",
+      });
+    } finally {
+      this.setLoading(false);
+    }
+  },
+
+  onToggleSourcePanel() {
+    this.setData({
+      sourcePanelExpanded: !this.data.sourcePanelExpanded,
+    });
+  },
+
+  onResultTabTap(e) {
+    const tab = e.currentTarget.dataset.tab;
+    const detailResult = this.data.detailResult;
+    if (!detailResult) {
+      return;
+    }
+
+    if (tab === "video" && !detailResult.sources.length) {
+      wx.showToast({
+        title: "当前作品没有视频资源",
+        icon: "none",
+      });
+      return;
+    }
+
+    if (tab === "image" && !detailResult.images.length) {
+      wx.showToast({
+        title: "当前作品没有图片资源",
+        icon: "none",
+      });
+      return;
+    }
+
+    this.setData({
+      resultTab: tab,
+    });
+  },
+
+  onSelectSource(e) {
+    const sourceId = e.currentTarget.dataset.id;
+    const selectedSourceMeta =
+      (this.data.detailResult?.sources || []).find((item) => item.id === sourceId) || null;
+
+    this.setData({
+      resultTab: "video",
+      selectedSourceId: sourceId,
+      selectedSourceMeta,
+      selectedSourceQuality: buildQualityText(selectedSourceMeta),
+      selectedSourceIndexText: this.buildSourceIndexText(this.data.detailResult, sourceId),
+      sourcePanelExpanded: false,
+    });
+  },
+
+  onSelectImage(e) {
+    const { id, url } = e.currentTarget.dataset;
+    this.setData({
+      resultTab: "image",
+      selectedImageId: id,
+      selectedImagePreview: url,
+      selectedImageIndexText: this.buildImageIndexText(this.data.detailResult, id),
+    });
+  },
+
+  onPreviewPrimaryMedia() {
+    if (this.data.resultTab === "image") {
+      const current = this.data.selectedImagePreview;
+      const images = (this.data.detailResult?.images || [])
+        .map((item) => item.downloadUrl || item.url)
+        .filter(Boolean);
+
+      if (!current || !images.length) {
+        return;
+      }
+
+      wx.previewImage({
+        current,
+        urls: images,
+      });
+      return;
+    }
+
+    const cover = this.data.detailResult?.cover;
+    if (!cover) {
+      return;
+    }
+
+    wx.previewImage({
+      current: cover,
+      urls: [cover],
+    });
+  },
+
+  async onSaveTap() {
+    const { detailResult, selectedSourceId, selectedImageId } = this.data;
+    if (!detailResult) {
+      return;
+    }
+
+    if (detailResult.mediaType === "video" && !selectedSourceId) {
+      wx.showToast({
+        title: "请选择一个视频源",
+        icon: "none",
+      });
+      return;
+    }
+
+    if (detailResult.mediaType === "note" && !selectedImageId) {
+      wx.showToast({
+        title: "请选择一张图片",
+        icon: "none",
+      });
+      return;
+    }
+
+    this.setLoading(true, "正在生成下载地址");
+    this.resetDownloadProgress();
+
+    try {
+      const ticket = await prepareDownload(
+        detailResult,
+        detailResult.mediaType === "video" ? selectedSourceId : selectedImageId
+      );
+
+      this.setData({
+        downloadTicket: ticket,
+      });
+
+      this.setLoading(true, "正在检查相册权限");
+      await this.ensureAlbumPermission();
+
+      this.setLoading(true, "正在下载资源");
+      const downloadRes = await this.downloadWithProgress(ticket.downloadUrl);
+
+      this.setLoading(true, "正在保存到相册");
+      await this.saveToAlbum(downloadRes.tempFilePath, detailResult.mediaType);
+
+      this.setData({
+        downloadProgress: 100,
+        downloadProgressText: "下载完成",
+      });
+
+      wx.showToast({
+        title: detailResult.mediaType === "video" ? "视频已保存到相册" : "图片已保存到相册",
+        icon: "success",
+      });
+    } catch (error) {
+      wx.showToast({
+        title: error?.message || "保存失败，请稍后重试",
+        icon: "none",
+      });
+    } finally {
+      this.setLoading(false);
+      setTimeout(() => {
+        this.resetDownloadProgress();
+      }, 800);
+    }
+  },
+
+  downloadWithProgress(downloadUrl) {
+    return new Promise((resolve, reject) => {
+      this.setData({
+        downloadProgressVisible: true,
+        downloadProgress: 0,
+        downloadProgressText: "准备下载 0%",
+      });
+
+      const task = wx.downloadFile({
+        url: downloadUrl,
+        success: (res) => {
+          if (res.statusCode === 200) {
+            resolve(res);
+            return;
+          }
+
+          reject({
+            message: "下载失败",
+            statusCode: res.statusCode,
+            raw: res,
+          });
+        },
+        fail: (err) => {
+          reject({
+            message: err?.errMsg || "下载失败",
+            raw: err,
+          });
+        },
+      });
+
+      if (task?.onProgressUpdate) {
+        task.onProgressUpdate((progress) => {
+          this.setData({
+            downloadProgressVisible: true,
+            downloadProgress: progress.progress || 0,
+            downloadProgressText: `下载进度 ${progress.progress || 0}%`,
+          });
+        });
+      }
+    });
+  },
+
+  async ensureAlbumPermission() {
+    const settingRes = await promisifyWx(wx.getSetting);
+    const permission = settingRes.authSetting["scope.writePhotosAlbum"];
+
+    if (permission === true || typeof permission === "undefined") {
+      try {
+        await promisifyWx(wx.authorize, {
+          scope: "scope.writePhotosAlbum",
+        });
+      } catch (error) {
+        if (permission === true) {
+          return;
+        }
+        await this.handlePermissionDenied();
+      }
+      return;
+    }
+
+    await this.handlePermissionDenied();
+  },
+
+  async handlePermissionDenied() {
+    const modalRes = await promisifyWx(wx.showModal, {
+      title: "需要相册权限",
+      content: "保存资源到相册需要相册权限，请在设置中开启。",
+      confirmText: "去设置",
+      cancelText: "取消",
+    });
+
+    if (!modalRes.confirm) {
+      throw new Error("未开启相册权限，无法保存到相册");
+    }
+
+    const settingRes = await promisifyWx(wx.openSetting);
+    if (!settingRes.authSetting["scope.writePhotosAlbum"]) {
+      throw new Error("未开启相册权限，无法保存到相册");
+    }
+  },
+
+  saveToAlbum(filePath, mediaType) {
+    return new Promise((resolve, reject) => {
+      const saveMethod =
+        mediaType === "video" ? wx.saveVideoToPhotosAlbum : wx.saveImageToPhotosAlbum;
+
+      saveMethod({
+        filePath,
+        success: resolve,
+        fail: reject,
+      });
+    });
+  },
+
+  setLoading(loading, loadingText = "") {
+    this.setData({
+      loading,
+      loadingText,
+    });
+  },
+
+  resetDownloadProgress() {
+    this.setData({
+      downloadProgressVisible: false,
+      downloadProgress: 0,
+      downloadProgressText: "",
+    });
+  },
+
+  getFriendlyMessage(error) {
+    const code = error?.code || error?.raw?.code || error?.raw?.error?.code;
+    if (code && ERROR_MESSAGE_MAP[code]) {
+      return ERROR_MESSAGE_MAP[code];
+    }
+
+    return error?.message || "处理失败，请稍后重试";
+  },
+});

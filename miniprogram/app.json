@@ -1,0 +1,16 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/result/index"
+  ],
+  "window": {
+    "backgroundColor": "#F4EFE7",
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#F4EFE7",
+    "navigationBarTitleText": "万能下载器",
+    "navigationBarTextStyle": "black"
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents"
+}

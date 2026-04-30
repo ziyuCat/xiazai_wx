@@ -1,0 +1,130 @@
+.page-shell {
+  min-height: 100vh;
+  padding: 28rpx 24rpx 24rpx;
+  background: linear-gradient(180deg, #16c45f 0%, #12b556 220rpx, #f4f7f3 220rpx, #f4f7f3 100%);
+}
+
+.hero-shell {
+  padding: 20rpx 8rpx 28rpx;
+}
+
+.hero-title {
+  font-size: 48rpx;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.hero-subtitle {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.main-card,
+.shortcut-card {
+  border-radius: 28rpx;
+  background: #ffffff;
+  box-shadow: 0 18rpx 48rpx rgba(15, 105, 47, 0.08);
+}
+
+.main-card {
+  padding: 0 24rpx 24rpx;
+}
+
+.notice-strip {
+  margin: 0 -24rpx;
+  padding: 18rpx 24rpx;
+  border-radius: 28rpx 28rpx 0 0;
+  background: linear-gradient(90deg, #fff6ca 0%, #fff8de 100%);
+  color: #c7860b;
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.share-input {
+  width: 100%;
+  min-height: 220rpx;
+  margin-top: 20rpx;
+  padding: 24rpx;
+  border: 2rpx solid rgba(18, 196, 95, 0.26);
+  border-radius: 22rpx;
+  background: #f7fff8;
+  color: #18221c;
+  font-size: 30rpx;
+  line-height: 1.6;
+}
+
+.input-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16rpx;
+}
+
+.ghost-btn,
+.primary-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 84rpx;
+  border-radius: 22rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.ghost-btn {
+  width: 330rpx;
+  border: 2rpx solid rgba(18, 196, 95, 0.22);
+  background: #f7fcf7;
+  color: #11a951;
+}
+
+.primary-btn {
+  width: 100%;
+  margin-top: 18rpx;
+  background: linear-gradient(180deg, #16c45f 0%, #10b155 100%);
+  color: #ffffff;
+}
+
+.error-banner {
+  margin-top: 16rpx;
+  padding: 16rpx 18rpx;
+  border-radius: 18rpx;
+  background: rgba(231, 88, 71, 0.1);
+  color: #d54a39;
+  font-size: 24rpx;
+}
+
+.shortcut-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-top: 20rpx;
+}
+
+.shortcut-card {
+  width: 336rpx;
+  margin-bottom: 16rpx;
+  padding: 22rpx;
+}
+
+.shortcut-title {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #18221c;
+}
+
+.shortcut-desc {
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: #859286;
+}
+
+.legal-text {
+  margin-top: 4rpx;
+  text-align: center;
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: #8e9c90;
+}

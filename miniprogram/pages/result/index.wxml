@@ -1,0 +1,107 @@
+<view wx:if="{{detailResult}}" class="page-shell">
+  <view class="share-card">
+    <view class="share-label">分享文案</view>
+    <textarea
+      class="share-textarea"
+      maxlength="-1"
+      value="{{inputText}}"
+      placeholder="支持直接修改分享文案后重新提取"
+      bindinput="onShareInputChange"
+    />
+  </view>
+
+  <view class="top-actions">
+    <button class="light-btn" bindtap="onClearInputTap">清空链接</button>
+    <button class="light-btn" bindtap="onPasteTap">一键粘贴</button>
+    <button class="solid-btn" loading="{{loading}}" disabled="{{loading}}" bindtap="onReExtractTap">重新提取</button>
+  </view>
+
+  <view class="result-card">
+    <view class="tab-row">
+      <view class="tab-item {{resultTab === 'video' ? 'tab-item-active' : ''}}" data-tab="video" bindtap="onResultTabTap">视频</view>
+      <view class="tab-item {{resultTab === 'image' ? 'tab-item-active' : ''}}" data-tab="image" bindtap="onResultTabTap">图片</view>
+      <view class="tab-item {{resultTab === 'title' ? 'tab-item-active' : ''}}" data-tab="title" bindtap="onResultTabTap">标题</view>
+    </view>
+
+    <view class="content-card">
+      <view wx:if="{{resultTab === 'video'}}" class="tab-panel">
+        <view class="preview-frame" bindtap="onPreviewPrimaryMedia">
+          <image class="preview-media" mode="aspectFill" src="{{detailResult.cover}}" />
+          <view class="play-button"></view>
+        </view>
+        <view class="chip-row">
+          <view class="info-chip">{{selectedSourceQuality || '默认源'}}</view>
+          <view class="info-chip">{{durationText || '时长未知'}}</view>
+          <view class="info-chip info-chip-ghost">{{selectedSourceIndexText || '源信息'}}</view>
+        </view>
+        <view class="source-summary" bindtap="onToggleSourcePanel">
+          <view class="source-summary-text">当前数据源：{{selectedSourceMeta ? selectedSourceMeta.label : '默认源'}}</view>
+          <view class="source-summary-action">{{sourcePanelExpanded ? '收起' : '展开'}}</view>
+        </view>
+        <scroll-view wx:if="{{sourcePanelExpanded}}" class="selector-scroll" scroll-x="true" enable-flex="true">
+          <view class="selector-track">
+            <view
+              wx:for="{{detailResult.sources}}"
+              wx:key="id"
+              class="selector-chip {{selectedSourceId === item.id ? 'selector-chip-active' : ''}}"
+              data-id="{{item.id}}"
+              bindtap="onSelectSource"
+            >
+              {{item.label}}
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+
+      <view wx:if="{{resultTab === 'image'}}" class="tab-panel">
+        <view class="preview-frame" bindtap="onPreviewPrimaryMedia">
+          <image class="preview-media image-fit" mode="aspectFit" src="{{selectedImagePreview || detailResult.cover}}" />
+        </view>
+        <view class="chip-row">
+          <view class="info-chip">图片作品</view>
+          <view class="info-chip">{{selectedImageIndexText || '第 1 张'}}</view>
+          <view class="info-chip info-chip-ghost">{{detailResult.images.length}} 张可选</view>
+        </view>
+        <scroll-view class="selector-scroll" scroll-x="true" enable-flex="true">
+          <view class="selector-track">
+            <view
+              wx:for="{{detailResult.images}}"
+              wx:key="id"
+              class="selector-chip {{selectedImageId === item.id ? 'selector-chip-active' : ''}}"
+              data-id="{{item.id}}"
+              data-url="{{item.downloadUrl || item.url}}"
+              bindtap="onSelectImage"
+            >
+              第{{index + 1}}张
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+
+      <view wx:if="{{resultTab === 'title'}}" class="tab-panel title-panel">
+        <view class="field-label">作品标题</view>
+        <view class="field-value clamp-2">{{detailResult.title || '未命名作品'}}</view>
+        <view class="field-label">作者信息</view>
+        <view class="field-value">{{detailResult.author.nickname || '匿名作者'}}</view>
+        <view class="field-label">作品热度</view>
+        <view class="field-value clamp-2">{{statisticsText || '暂无热度数据'}}</view>
+      </view>
+    </view>
+
+    <view class="bottom-bar">
+      <view wx:if="{{downloadProgressVisible}}" class="progress-card">
+        <view class="progress-head">
+          <view class="progress-label">下载进度</view>
+          <view class="progress-value">{{downloadProgress}}%</view>
+        </view>
+        <view class="progress-track">
+          <view class="progress-fill" style="width: {{downloadProgress}}%;"></view>
+        </view>
+        <view class="progress-text">{{downloadProgressText}}</view>
+      </view>
+      <button class="primary-btn" loading="{{loading}}" disabled="{{loading}}" bindtap="onSaveTap">
+        {{loading ? loadingText : (detailResult.mediaType === 'video' ? '保存视频' : '保存图片')}}
+      </button>
+    </view>
+  </view>
+</view>
