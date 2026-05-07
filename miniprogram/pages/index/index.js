@@ -1,4 +1,9 @@
 const { parseShareText, fetchDetail, prepareDownload } = require("../../utils/api");
+const {
+  buildQualityText,
+  normalizeDetailResult,
+  isPreferredDefaultSource,
+} = require("../../utils/media");
 const realtimeLog = require("../../utils/realtimeLog");
 
 const ERROR_MESSAGE_MAP = {
@@ -15,7 +20,20 @@ const SHORTCUTS = [
   { id: "extract", title: "开始提取", desc: "解析链接并查看详情" },
   { id: "guide",   title: "使用教程", desc: "三步完成提取和保存" },
   { id: "faq",     title: "常见问题", desc: "权限、失败和域名配置说明" },
+  { id: "server",  title: "切换服务器", desc: "手动选择当前要使用的服务器" },
 ];
+
+function buildShortcuts(serverState) {
+  const serverDesc = serverState?.total
+    ? `当前：服务器 ${serverState.activeIndex + 1}/${serverState.total}`
+    : "当前：未配置服务器";
+
+  return SHORTCUTS.map((item) => (
+    item.id === "server"
+      ? { ...item, desc: serverDesc }
+      : item
+  ));
+}
 
 function promisifyWx(method, options = {}) {
   return new Promise((resolve, reject) => {
@@ -44,65 +62,10 @@ function formatCount(value) {
   return `${count}`;
 }
 
-function buildQualityText(source) {
-  if (!source) return "";
-  const width = Number(source.width) || 0;
-  const height = Number(source.height) || 0;
-  if (height >= 1920 || width >= 1920) return "超清";
-  if (height >= 1080 || width >= 1080) return "1080P";
-  if (height >= 720 || width >= 720) return "720P";
-  if (width && height) return `${width} x ${height}`;
-  return "默认源";
-}
-
-function formatSourceLabel(source) {
-  if (!source) return "未知源";
-  const raw = (source.label || "").toLowerCase();
-  const wm  = source.watermark || "";
-
-  const quality = buildQualityText(source);
-
-  const isNoWm =
-    wm === "without_watermark" ||
-    wm === "unknown" ||
-    raw.includes("no-watermark") ||
-    raw.includes("no_watermark") ||
-    raw.includes("nowm") ||
-    raw.includes("guessed no-watermark") ||
-    raw.includes("无水印");
-
-  const isWm =
-    wm === "with_watermark" ||
-    (raw.includes("watermark") && !isNoWm);
-
-  const wmText = isNoWm ? "无水印" : isWm ? "有水印" : "";
-  const parts = [quality, wmText].filter(Boolean);
-  if (parts.length) return parts.join(" · ");
-
-  if (raw.includes("default"))  return "默认源";
-  if (raw.includes("origin"))   return "原画";
-  if (raw.includes("high"))     return "高清";
-  if (raw.includes("normal") || raw.includes("standard")) return "标清";
-  return source.label || "未知源";
-}
-
-function normalizeDetailResult(detailResult) {
-  const rawSources = Array.isArray(detailResult?.sources) ? detailResult.sources : [];
-  const sources = rawSources.map((s) => ({ ...s, displayLabel: formatSourceLabel(s) }));
-  const images = Array.isArray(detailResult?.images) ? detailResult.images : [];
-  const cover = detailResult?.cover || images[0]?.downloadUrl || images[0]?.url || "";
-  const durationMs =
-    detailResult?.durationMs ||
-    rawSources[0]?.durationMs ||
-    rawSources.find((item) => item?.durationMs)?.durationMs ||
-    0;
-  return { ...detailResult, cover, durationMs, author: detailResult?.author || {}, sources, images };
-}
-
 Page({
   data: {
     // 输入状态
-    shortcuts: SHORTCUTS,
+    shortcuts: buildShortcuts(),
     inputText: "",
     loading: false,
     loadingText: "",
@@ -126,7 +89,23 @@ Page({
     downloadProgressText: "",
   },
 
+  onLoad() {
+    this.syncShortcuts();
+  },
+
+  onShow() {
+    this.syncShortcuts();
+  },
+
   // ── 输入区 ──────────────────────────────────────────────
+
+  syncShortcuts() {
+    const app = getApp();
+    const serverState = app.getServerState ? app.getServerState() : null;
+    this.setData({
+      shortcuts: buildShortcuts(serverState),
+    });
+  },
 
   onInputChange(e) {
     this.setData({ inputText: e.detail.value, errorMessage: "" });
@@ -147,6 +126,31 @@ Page({
     this.setData({ inputText: "", errorMessage: "" });
   },
 
+  async onSwitchServerTap() {
+    if (this.data.loading) return;
+    const app = getApp();
+    const serverState = app.getServerState ? app.getServerState() : null;
+    if (!serverState?.total) {
+      wx.showToast({ title: "未配置可用服务器", icon: "none" });
+      return;
+    }
+
+    const itemList = serverState.baseUrls.map((_, index) =>
+      index === serverState.activeIndex ? `服务器 ${index + 1}（当前）` : `服务器 ${index + 1}`
+    );
+
+    try {
+      const res = await promisifyWx(wx.showActionSheet, { itemList });
+      const nextState = app.setActiveServer ? app.setActiveServer(res.tapIndex) : null;
+      if (!nextState?.total) return;
+      this.syncShortcuts();
+      wx.showToast({
+        title: `已切换到服务器 ${nextState.activeIndex + 1}`,
+        icon: "none",
+      });
+    } catch (error) {}
+  },
+
   async onExtractTap() {
     const inputText = (this.data.inputText || "").trim();
     if (!inputText) { this.showError("请输入抖音分享文案"); return; }
@@ -165,8 +169,10 @@ Page({
       const detailResult = await fetchDetail(parseResult);
       this.applyWorkData({ inputText, parseResult, detailResult });
     } catch (error) {
+      this.syncShortcuts();
       this.showError(this.getFriendlyMessage(error));
     } finally {
+      this.syncShortcuts();
       this.setLoading(false);
     }
   },
@@ -175,6 +181,7 @@ Page({
     const action = e.currentTarget.dataset.action;
     if (action === "paste")   { await this.onPasteTap(); return; }
     if (action === "extract") { await this.onExtractTap(); return; }
+    if (action === "server")  { await this.onSwitchServerTap(); return; }
     if (action === "guide") {
       wx.showModal({ title: "使用教程", content: "1. 复制抖音分享文案\n2. 点击开始提取\n3. 选择资源并保存到相册", showCancel: false });
       return;
@@ -223,18 +230,7 @@ Page({
   getDefaultSource(detailResult) {
     const sources = detailResult?.sources || [];
     if (!sources.length) return null;
-    return (
-      sources.find((item) => {
-        const label = item?.label || "";
-        const id = item?.id || "";
-        return (
-          label.includes("无水印") ||
-          id.includes("nowm") ||
-          item?.watermark === "without_watermark" ||
-          item?.watermark === "unknown"
-        );
-      }) || sources[0]
-    );
+    return sources.find((item) => isPreferredDefaultSource(item)) || sources[0];
   },
 
   buildStatisticsText(statistics) {
@@ -322,8 +318,10 @@ Page({
       this.applyWorkData({ inputText, parseResult, detailResult });
       wx.showToast({ title: "提取成功", icon: "success" });
     } catch (error) {
+      this.syncShortcuts();
       wx.showToast({ title: this.getFriendlyMessage(error), icon: "none" });
     } finally {
+      this.syncShortcuts();
       this.setLoading(false);
     }
   },
@@ -359,8 +357,10 @@ Page({
         icon: "success",
       });
     } catch (error) {
+      this.syncShortcuts();
       wx.showToast({ title: error?.message || "保存失败，请稍后重试", icon: "none" });
     } finally {
+      this.syncShortcuts();
       this.setLoading(false);
       setTimeout(() => this.resetDownloadProgress(), 800);
     }

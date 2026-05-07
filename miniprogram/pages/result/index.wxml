@@ -41,7 +41,7 @@
           class="chip {{selectedSourceId === item.id ? 'chip-on' : ''}}"
           data-id="{{item.id}}"
           bindtap="onSelectSource"
-        >{{item.label}}</view>
+        >{{item.displayLabel}}</view>
       </view>
     </scroll-view>
 

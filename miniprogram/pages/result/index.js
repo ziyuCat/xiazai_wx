@@ -3,6 +3,11 @@ const {
   fetchDetail,
   prepareDownload,
 } = require("../../utils/api");
+const {
+  buildQualityText,
+  normalizeDetailResult,
+  isPreferredDefaultSource,
+} = require("../../utils/media");
 const realtimeLog = require("../../utils/realtimeLog");
 
 const ERROR_MESSAGE_MAP = {
@@ -48,48 +53,6 @@ function formatCount(value) {
     return `${(count / 10000).toFixed(count >= 100000 ? 0 : 1)}万`;
   }
   return `${count}`;
-}
-
-function buildQualityText(source) {
-  if (!source) {
-    return "";
-  }
-
-  const width = Number(source.width) || 0;
-  const height = Number(source.height) || 0;
-  if (height >= 1920 || width >= 1920) {
-    return "超清";
-  }
-  if (height >= 1080 || width >= 1080) {
-    return "1080P";
-  }
-  if (height >= 720 || width >= 720) {
-    return "720P";
-  }
-  if (width && height) {
-    return `${width} x ${height}`;
-  }
-  return "默认源";
-}
-
-function normalizeDetailResult(detailResult) {
-  const sources = Array.isArray(detailResult?.sources) ? detailResult.sources : [];
-  const images = Array.isArray(detailResult?.images) ? detailResult.images : [];
-  const cover = detailResult?.cover || images[0]?.downloadUrl || images[0]?.url || "";
-  const durationMs =
-    detailResult?.durationMs ||
-    sources[0]?.durationMs ||
-    sources.find((item) => item?.durationMs)?.durationMs ||
-    0;
-
-  return {
-    ...detailResult,
-    cover,
-    durationMs,
-    author: detailResult?.author || {},
-    sources,
-    images,
-  };
 }
 
 Page({
@@ -177,18 +140,7 @@ Page({
       return null;
     }
 
-    return (
-      sources.find((item) => {
-        const label = item?.label || "";
-        const id = item?.id || "";
-        return (
-          label.includes("无水印") ||
-          id.includes("nowm") ||
-          item?.watermark === "without_watermark" ||
-          item?.watermark === "unknown"
-        );
-      }) || sources[0]
-    );
+    return sources.find((item) => isPreferredDefaultSource(item)) || sources[0];
   },
 
   buildStatisticsText(statistics) {
