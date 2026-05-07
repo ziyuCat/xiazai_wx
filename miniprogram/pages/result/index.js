@@ -3,6 +3,7 @@ const {
   fetchDetail,
   prepareDownload,
 } = require("../../utils/api");
+const realtimeLog = require("../../utils/realtimeLog");
 
 const ERROR_MESSAGE_MAP = {
   EMPTY_TEXT: "请输入抖音分享文案",
@@ -21,6 +22,11 @@ function promisifyWx(method, options = {}) {
       fail: reject,
     });
   });
+}
+
+function isAlbumPermissionDenied(error) {
+  const errMsg = error?.errMsg || "";
+  return errMsg.includes("auth deny") || errMsg.includes("authorize no response");
 }
 
 function formatDuration(durationMs) {
@@ -499,25 +505,58 @@ Page({
   async ensureAlbumPermission() {
     const settingRes = await promisifyWx(wx.getSetting);
     const permission = settingRes.authSetting["scope.writePhotosAlbum"];
+    const permissionState = typeof permission === "undefined" ? "undefined" : String(permission);
 
-    if (permission === true || typeof permission === "undefined") {
+    realtimeLog.info("get_setting", {
+      permission: permissionState,
+    });
+
+    if (permission === true) {
+      realtimeLog.info("permission_already_granted", {
+        permission: permissionState,
+      });
+      return;
+    }
+
+    if (typeof permission === "undefined") {
       try {
+        realtimeLog.info("authorize_start", {
+          scope: "scope.writePhotosAlbum",
+        });
         await promisifyWx(wx.authorize, {
           scope: "scope.writePhotosAlbum",
         });
+        realtimeLog.info("authorize_success", {
+          scope: "scope.writePhotosAlbum",
+        });
       } catch (error) {
-        if (permission === true) {
+        realtimeLog.warn("authorize_failed", {
+          scope: "scope.writePhotosAlbum",
+          errMsg: error?.errMsg || "",
+          permission: permissionState,
+        });
+        if (isAlbumPermissionDenied(error)) {
+          await this.handlePermissionDenied("authorize_denied");
           return;
         }
-        await this.handlePermissionDenied();
+        realtimeLog.error("authorize_unexpected_error", {
+          scope: "scope.writePhotosAlbum",
+          errMsg: error?.errMsg || "",
+          permission: permissionState,
+        });
+        throw new Error(error?.errMsg || "相册权限申请失败，请稍后重试");
       }
       return;
     }
 
-    await this.handlePermissionDenied();
+    await this.handlePermissionDenied("stored_false");
   },
 
-  async handlePermissionDenied() {
+  async handlePermissionDenied(reason = "unknown") {
+    realtimeLog.warn("open_setting_prompt", {
+      reason,
+    });
+
     const modalRes = await promisifyWx(wx.showModal, {
       title: "需要相册权限",
       content: "保存资源到相册需要相册权限，请在设置中开启。",
@@ -525,12 +564,35 @@ Page({
       cancelText: "取消",
     });
 
+    realtimeLog.info("open_setting_prompt_result", {
+      reason,
+      confirmed: !!modalRes.confirm,
+    });
+
     if (!modalRes.confirm) {
+      realtimeLog.warn("open_setting_prompt_cancelled", {
+        reason,
+      });
       throw new Error("未开启相册权限，无法保存到相册");
     }
 
     const settingRes = await promisifyWx(wx.openSetting);
-    if (!settingRes.authSetting["scope.writePhotosAlbum"]) {
+    const permissionAfterSetting = settingRes.authSetting["scope.writePhotosAlbum"];
+
+    realtimeLog.info("open_setting_result", {
+      reason,
+      permission: typeof permissionAfterSetting === "undefined"
+        ? "undefined"
+        : String(permissionAfterSetting),
+    });
+
+    if (!permissionAfterSetting) {
+      realtimeLog.warn("open_setting_not_granted", {
+        reason,
+        permission: typeof permissionAfterSetting === "undefined"
+          ? "undefined"
+          : String(permissionAfterSetting),
+      });
       throw new Error("未开启相册权限，无法保存到相册");
     }
   },
