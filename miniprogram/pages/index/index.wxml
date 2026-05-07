@@ -1,44 +1,136 @@
-<view class="page-shell">
-  <view class="hero-shell">
-    <view class="hero-title">万能提取下载器</view>
-    <view class="hero-subtitle">首页只做输入，提取成功后直接跳详情页，无需往下滑。</view>
-  </view>
+<view class="page {{detailResult ? 'page-dark' : ''}}">
 
-  <view class="main-card">
-    <view class="notice-strip">复制抖音分享文案后，点击“一键粘贴”或直接输入</view>
-
-    <textarea
-      class="share-input"
-      maxlength="-1"
-      placeholder="请粘贴完整的抖音分享文案"
-      value="{{inputText}}"
-      bindinput="onInputChange"
-    />
-
-    <view class="input-actions">
-      <button class="ghost-btn" bindtap="onPasteTap">一键粘贴</button>
-      <button class="ghost-btn" bindtap="onResetTap">清空</button>
+  <view class="header">
+    <view class="header-text">
+      <view class="header-title">万能下载器</view>
+      <view class="header-sub">粘贴分享文案，一键提取保存</view>
     </view>
-
-    <button class="primary-btn" loading="{{loading}}" disabled="{{loading}}" bindtap="onExtractTap">
-      {{loading ? loadingText : '开始提取'}}
-    </button>
-
-    <view wx:if="{{errorMessage}}" class="error-banner">{{errorMessage}}</view>
-  </view>
-
-  <view class="shortcut-grid">
-    <view
-      wx:for="{{shortcuts}}"
-      wx:key="id"
-      class="shortcut-card"
-      data-action="{{item.id}}"
-      bindtap="onShortcutTap"
-    >
-      <view class="shortcut-title">{{item.title}}</view>
-      <view class="shortcut-desc">{{item.desc}}</view>
+    <view class="header-badge {{inputText ? 'badge-ready' : ''}}">
+      {{inputText ? '已填写' : '待输入'}}
     </view>
   </view>
 
-  <view class="legal-text">视频版权归平台及作者所有，本应用不存储任何视频及图片内容。</view>
+  <view class="main">
+    <!-- 输入卡片（常驻） -->
+    <view class="input-card">
+      <textarea
+        class="input-field"
+        maxlength="-1"
+        placeholder="粘贴抖音分享文案到这里…"
+        value="{{inputText}}"
+        bindinput="onInputChange"
+      />
+      <view class="input-actions">
+        <view class="btn-ghost" bindtap="onPasteTap">粘贴</view>
+        <view class="btn-ghost" bindtap="onResetTap">清空</view>
+        <button class="btn-primary" loading="{{loading}}" disabled="{{loading}}" bindtap="onExtractTap">
+          {{loading ? loadingText : '开始提取'}}
+        </button>
+      </view>
+      <view wx:if="{{errorMessage}}" class="error-bar">{{errorMessage}}</view>
+    </view>
+
+    <!-- 快捷入口（无结果时显示） -->
+    <view wx:if="{{!detailResult}}" class="shortcuts">
+      <view
+        wx:for="{{shortcuts}}"
+        wx:key="id"
+        class="shortcut-item"
+        data-action="{{item.id}}"
+        bindtap="onShortcutTap"
+      >
+        <view class="shortcut-body">
+          <view class="shortcut-title">{{item.title}}</view>
+          <view class="shortcut-desc">{{item.desc}}</view>
+        </view>
+        <view class="shortcut-arrow">›</view>
+      </view>
+    </view>
+
+    <!-- 结果区（提取成功后展开） -->
+    <view wx:if="{{detailResult}}" class="result">
+      <view class="r-info-bar">
+        <view class="r-info-content">
+          <view class="r-title clamp-2">{{detailResult.title || '未命名作品'}}</view>
+          <view class="r-meta">@{{detailResult.author.nickname || '匿名'}}{{statisticsText ? '  ·  ' + statisticsText : ''}}</view>
+        </view>
+        <view class="r-info-aside">
+          <view class="r-badge">{{detailResult.mediaType === 'video' ? '视频' : '图文'}}</view>
+          <view class="r-close" bindtap="onBackToInput">✕</view>
+        </view>
+      </view>
+
+      <view class="r-preview" bindtap="onPreviewPrimaryMedia">
+        <image
+          class="r-preview-img"
+          mode="aspectFill"
+          src="{{resultTab === 'image' ? (selectedImagePreview || detailResult.cover) : detailResult.cover}}"
+        />
+        <view wx:if="{{resultTab === 'video'}}" class="r-play"></view>
+        <view class="r-tags">
+          <view wx:if="{{resultTab === 'video' && selectedSourceQuality}}" class="r-tag">{{selectedSourceQuality}}</view>
+          <view wx:if="{{resultTab === 'video' && durationText}}" class="r-tag">{{durationText}}</view>
+          <view wx:if="{{resultTab === 'image' && selectedImageIndexText}}" class="r-tag">{{selectedImageIndexText}}</view>
+        </view>
+      </view>
+
+      <view class="r-tabs">
+        <view class="r-tab {{resultTab === 'video' ? 'r-tab-on' : ''}}" data-tab="video" bindtap="onResultTabTap">视频</view>
+        <view class="r-tab {{resultTab === 'image' ? 'r-tab-on' : ''}}" data-tab="image" bindtap="onResultTabTap">图片</view>
+        <view class="r-tab {{resultTab === 'title' ? 'r-tab-on' : ''}}" data-tab="title" bindtap="onResultTabTap">信息</view>
+      </view>
+
+      <view class="r-panel">
+        <scroll-view wx:if="{{resultTab === 'video'}}" class="r-scroll" scroll-x="true" enable-flex="true">
+          <view class="r-chip-track">
+            <view
+              wx:for="{{detailResult.sources}}"
+              wx:key="id"
+              class="r-chip {{selectedSourceId === item.id ? 'r-chip-on' : ''}}"
+              data-id="{{item.id}}"
+              bindtap="onSelectSource"
+            >{{item.displayLabel}}</view>
+          </view>
+        </scroll-view>
+
+        <scroll-view wx:if="{{resultTab === 'image'}}" class="r-scroll" scroll-x="true" enable-flex="true">
+          <view class="r-chip-track">
+            <view
+              wx:for="{{detailResult.images}}"
+              wx:key="id"
+              class="r-chip {{selectedImageId === item.id ? 'r-chip-on' : ''}}"
+              data-id="{{item.id}}"
+              data-url="{{item.downloadUrl || item.url}}"
+              bindtap="onSelectImage"
+            >第{{index + 1}}张</view>
+          </view>
+        </scroll-view>
+
+        <view wx:if="{{resultTab === 'title'}}" class="r-info-grid">
+          <view class="r-ig-item"><view class="r-ig-label">标题</view><view class="r-ig-value clamp-2">{{detailResult.title || '未命名'}}</view></view>
+          <view class="r-ig-item"><view class="r-ig-label">作者</view><view class="r-ig-value">{{detailResult.author.nickname || '匿名'}}</view></view>
+          <view class="r-ig-item"><view class="r-ig-label">热度</view><view class="r-ig-value">{{statisticsText || '暂无'}}</view></view>
+          <view class="r-ig-item">
+            <view class="r-ig-label">资源</view>
+            <view class="r-ig-value">{{detailResult.mediaType === 'video' ? ('视频源 ' + detailResult.sources.length + ' 个') : ('图片 ' + detailResult.images.length + ' 张')}}</view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{downloadProgressVisible}}" class="r-progress">
+        <view class="r-progress-track"><view class="r-progress-fill" style="width: {{downloadProgress}}%;"></view></view>
+        <view class="r-progress-text">{{downloadProgressText}}</view>
+      </view>
+
+      <view class="r-save-bar">
+        <view class="r-btn-reextract" bindtap="onReExtractTap">重提取</view>
+        <button class="r-btn-save" loading="{{loading}}" disabled="{{loading}}" bindtap="onSaveTap">
+          {{loading ? loadingText : (detailResult.mediaType === 'video' ? '保存视频到相册' : '保存图片到相册')}}
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{!detailResult}}" class="footer">仅做资源提取辅助，版权归原作者所有</view>
+
 </view>
