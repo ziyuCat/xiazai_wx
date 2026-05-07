@@ -4,9 +4,9 @@
     "pages/result/index"
   ],
   "window": {
-    "backgroundColor": "#F4EFE7",
+    "backgroundColor": "#F4F7F3",
     "backgroundTextStyle": "light",
-    "navigationBarBackgroundColor": "#F4EFE7",
+    "navigationBarBackgroundColor": "#F4F7F3",
     "navigationBarTitleText": "万能下载器",
     "navigationBarTextStyle": "black"
   },
