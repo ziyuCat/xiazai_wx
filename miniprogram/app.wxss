@@ -1,7 +1,9 @@
 page {
   min-height: 100%;
-  background: #f2f2f7;
-  color: #0f172a;
+  background:
+    radial-gradient(circle at top left, rgba(22, 196, 95, 0.1) 0%, rgba(22, 196, 95, 0) 34%),
+    linear-gradient(180deg, #f6fbf7 0%, #eef6f0 52%, #eaf3ed 100%);
+  color: #18221c;
 }
 
 view,
@@ -18,7 +20,6 @@ button {
   border-radius: 0;
   line-height: 1.2;
   padding: 0;
-  margin: 0;
 }
 
 button::after {
