@@ -5,6 +5,9 @@ const {
 } = require("../../utils/api");
 const realtimeLog = require("../../utils/realtimeLog");
 
+const PROMOTION_SHARE_PATH = "/pages/index/index";
+const PROMOTION_SHARE_TITLE = "步步万能下载器，来试试一键提取无水印资源";
+
 const ERROR_MESSAGE_MAP = {
   EMPTY_TEXT: "请输入抖音分享文案",
   NO_URL_FOUND: "没找到可解析链接，请重新复制完整分享文案",
@@ -183,26 +186,38 @@ Page({
   },
 
   onLoad() {
+    this.showNativeShareMenu();
+
     const app = getApp();
     const currentWork = app.globalData.currentWork;
 
-    if (!currentWork?.detailResult) {
-      wx.showToast({
-        title: "请先返回首页提取内容",
-        icon: "none",
+    if (currentWork?.detailResult) {
+      this.applyWorkData({
+        inputText: currentWork.inputText || "",
+        parseResult: currentWork.parseResult || null,
+        detailResult: currentWork.detailResult,
       });
-      setTimeout(() => {
-        wx.reLaunch({
-          url: "/pages/index/index",
-        });
-      }, 300);
       return;
     }
 
-    this.applyWorkData({
-      inputText: currentWork.inputText || "",
-      parseResult: currentWork.parseResult || null,
-      detailResult: currentWork.detailResult,
+    wx.showToast({
+      title: "请先返回首页提取内容",
+      icon: "none",
+    });
+    setTimeout(() => {
+      wx.reLaunch({
+        url: "/pages/index/index",
+      });
+    }, 300);
+  },
+
+  showNativeShareMenu() {
+    if (!wx.showShareMenu) {
+      return;
+    }
+
+    wx.showShareMenu({
+      menus: ["shareAppMessage", "shareTimeline"],
     });
   },
 
@@ -287,6 +302,36 @@ Page({
 
     const index = images.findIndex((item) => item.id === imageId);
     return `第 ${index >= 0 ? index + 1 : 1}/${images.length} 张`;
+  },
+
+  buildShareOptions() {
+    const { detailResult } = this.data;
+    const imageUrl = detailResult?.cover || getPreferredImageUrl(detailResult?.images?.[0]) || "";
+
+    return {
+      title: PROMOTION_SHARE_TITLE,
+      imageUrl,
+    };
+  },
+
+  onShareAppMessage() {
+    const { title, imageUrl } = this.buildShareOptions();
+
+    return {
+      title,
+      path: PROMOTION_SHARE_PATH,
+      imageUrl,
+    };
+  },
+
+  onShareTimeline() {
+    const { title, imageUrl } = this.buildShareOptions();
+
+    return {
+      title,
+      query: "",
+      imageUrl,
+    };
   },
 
   onShareInputChange(e) {

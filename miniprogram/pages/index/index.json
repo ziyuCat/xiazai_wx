@@ -1,3 +1,5 @@
 {
-  "navigationBarTitleText": "万能下载器"
+  "navigationBarTitleText": "万能下载器",
+  "enableShareAppMessage": true,
+  "enableShareTimeline": true
 }

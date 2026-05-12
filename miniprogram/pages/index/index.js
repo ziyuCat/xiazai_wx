@@ -1,5 +1,8 @@
 const { parseShareText, fetchDetail } = require("../../utils/api");
 
+const PROMOTION_SHARE_PATH = "/pages/index/index";
+const PROMOTION_SHARE_TITLE = "步步万能下载器，来试试一键提取无水印资源";
+
 const ERROR_MESSAGE_MAP = {
   EMPTY_TEXT: "请输入抖音分享文案",
   NO_URL_FOUND: "没找到可解析链接，请重新复制完整分享文案",
@@ -49,6 +52,34 @@ Page({
     loading: false,
     loadingText: "",
     errorMessage: "",
+  },
+
+  onLoad() {
+    this.showNativeShareMenu();
+  },
+
+  showNativeShareMenu() {
+    if (!wx.showShareMenu) {
+      return;
+    }
+
+    wx.showShareMenu({
+      menus: ["shareAppMessage", "shareTimeline"],
+    });
+  },
+
+  onShareAppMessage() {
+    return {
+      title: PROMOTION_SHARE_TITLE,
+      path: PROMOTION_SHARE_PATH,
+    };
+  },
+
+  onShareTimeline() {
+    return {
+      title: PROMOTION_SHARE_TITLE,
+      query: "",
+    };
   },
 
   onInputChange(e) {
