@@ -171,9 +171,11 @@ Page({
     selectedImageId: "",
     selectedImagePreview: "",
     selectedImageIndexText: "",
+    selectedImageCurrent: 0,
     sourcePanelExpanded: false,
     loading: false,
     loadingText: "",
+    activeSaveAction: "",
     downloadTicket: null,
     downloadProgressVisible: false,
     downloadProgress: 0,
@@ -226,7 +228,11 @@ Page({
       selectedImageId: selectedImage?.id || "",
       selectedImagePreview: getPreferredImageUrl(selectedImage) || normalizedDetail.cover || "",
       selectedImageIndexText: this.buildImageIndexText(normalizedDetail, selectedImage?.id || ""),
+      selectedImageCurrent: this.getImageIndexById(normalizedDetail, selectedImage?.id || ""),
       sourcePanelExpanded: false,
+      loading: false,
+      loadingText: "",
+      activeSaveAction: "",
       downloadTicket: null,
       downloadProgressVisible: false,
       downloadProgress: 0,
@@ -241,6 +247,16 @@ Page({
     }
 
     return sources.find((item) => isLikelyNoWatermarkSource(item)) || sources[0];
+  },
+
+  getImageIndexById(detailResult, imageId) {
+    const images = detailResult?.images || [];
+    if (!images.length) {
+      return 0;
+    }
+
+    const index = images.findIndex((item) => item.id === imageId);
+    return index >= 0 ? index : 0;
   },
 
   buildStatisticsText(statistics) {
@@ -414,6 +430,23 @@ Page({
       selectedImageId: id,
       selectedImagePreview: url,
       selectedImageIndexText: this.buildImageIndexText(this.data.detailResult, id),
+      selectedImageCurrent: this.getImageIndexById(this.data.detailResult, id),
+    });
+  },
+
+  onImageSwiperChange(e) {
+    const current = Number(e.detail.current) || 0;
+    const images = this.data.detailResult?.images || [];
+    const selectedImage = images[current] || null;
+    if (!selectedImage) {
+      return;
+    }
+
+    this.setData({
+      selectedImageId: selectedImage.id || "",
+      selectedImagePreview: getPreferredImageUrl(selectedImage),
+      selectedImageIndexText: this.buildImageIndexText(this.data.detailResult, selectedImage.id || ""),
+      selectedImageCurrent: current,
     });
   },
 
@@ -444,8 +477,39 @@ Page({
     });
   },
 
+  async downloadAndSaveImage(detailResult, imageId) {
+    let ticket = null;
+    let downloadUrl = "";
+    const selectedImage = (detailResult.images || []).find((item) => item.id === imageId) || null;
+    downloadUrl = getPreferredImageUrl(selectedImage);
+
+    if (!downloadUrl) {
+      ticket = await prepareDownload(detailResult, imageId);
+      downloadUrl = ticket.downloadUrl;
+    }
+
+    this.setData({
+      downloadTicket: ticket,
+    });
+
+    try {
+      return await this.downloadWithProgress(downloadUrl);
+    } catch (error) {
+      const canFallbackToTicket = downloadUrl && !ticket;
+      if (!canFallbackToTicket) {
+        throw error;
+      }
+
+      ticket = await prepareDownload(detailResult, imageId);
+      this.setData({
+        downloadTicket: ticket,
+      });
+      return this.downloadWithProgress(ticket.downloadUrl);
+    }
+  },
+
   async onSaveTap() {
-    const { detailResult, selectedSourceId, selectedImageId } = this.data;
+    const { detailResult, selectedSourceId } = this.data;
     if (!detailResult) {
       return;
     }
@@ -458,34 +522,14 @@ Page({
       return;
     }
 
-    if (detailResult.mediaType === "note" && !selectedImageId) {
-      wx.showToast({
-        title: "请选择一张图片",
-        icon: "none",
-      });
-      return;
-    }
-
+    this.setData({
+      activeSaveAction: "video",
+    });
     this.setLoading(true, "正在生成下载地址");
     this.resetDownloadProgress();
 
     try {
-      let ticket = null;
-      let downloadUrl = "";
-
-      if (detailResult.mediaType === "note") {
-        const selectedImage =
-          (detailResult.images || []).find((item) => item.id === selectedImageId) || null;
-        downloadUrl = getPreferredImageUrl(selectedImage);
-      }
-
-      if (!downloadUrl) {
-        ticket = await prepareDownload(
-          detailResult,
-          detailResult.mediaType === "video" ? selectedSourceId : selectedImageId
-        );
-        downloadUrl = ticket.downloadUrl;
-      }
+      const ticket = await prepareDownload(detailResult, selectedSourceId);
 
       this.setData({
         downloadTicket: ticket,
@@ -495,21 +539,7 @@ Page({
       await this.ensureAlbumPermission();
 
       this.setLoading(true, "正在下载资源");
-      let downloadRes;
-      try {
-        downloadRes = await this.downloadWithProgress(downloadUrl);
-      } catch (error) {
-        const canFallbackToTicket = detailResult.mediaType === "note" && downloadUrl && !ticket;
-        if (!canFallbackToTicket) {
-          throw error;
-        }
-
-        ticket = await prepareDownload(detailResult, selectedImageId);
-        this.setData({
-          downloadTicket: ticket,
-        });
-        downloadRes = await this.downloadWithProgress(ticket.downloadUrl);
-      }
+      const downloadRes = await this.downloadWithProgress(ticket.downloadUrl);
 
       this.setLoading(true, "正在保存到相册");
       await this.saveToAlbum(downloadRes.tempFilePath, detailResult.mediaType);
@@ -520,7 +550,7 @@ Page({
       });
 
       wx.showToast({
-        title: detailResult.mediaType === "video" ? "视频已保存到相册" : "图片已保存到相册",
+        title: "视频已保存到相册",
         icon: "success",
       });
     } catch (error) {
@@ -530,6 +560,126 @@ Page({
       });
     } finally {
       this.setLoading(false);
+      this.setData({
+        activeSaveAction: "",
+      });
+      setTimeout(() => {
+        this.resetDownloadProgress();
+      }, 800);
+    }
+  },
+
+  async onSaveCurrentImageTap() {
+    const { detailResult, selectedImageId } = this.data;
+    if (!detailResult) {
+      return;
+    }
+
+    if (!selectedImageId) {
+      wx.showToast({
+        title: "请选择一张图片",
+        icon: "none",
+      });
+      return;
+    }
+
+    this.setData({
+      activeSaveAction: "current",
+    });
+    this.resetDownloadProgress();
+
+    try {
+      this.setLoading(true, "正在检查相册权限");
+      await this.ensureAlbumPermission();
+
+      this.setLoading(true, "正在下载当前图片");
+      const downloadRes = await this.downloadAndSaveImage(detailResult, selectedImageId);
+
+      this.setLoading(true, "正在保存到相册");
+      await this.saveToAlbum(downloadRes.tempFilePath, "note");
+
+      this.setData({
+        downloadProgress: 100,
+        downloadProgressText: "当前图片下载完成",
+      });
+
+      wx.showToast({
+        title: "当前图片已保存到相册",
+        icon: "success",
+      });
+    } catch (error) {
+      wx.showToast({
+        title: error?.message || "保存失败，请稍后重试",
+        icon: "none",
+      });
+    } finally {
+      this.setLoading(false);
+      this.setData({
+        activeSaveAction: "",
+      });
+      setTimeout(() => {
+        this.resetDownloadProgress();
+      }, 800);
+    }
+  },
+
+  async onSaveAllImagesTap() {
+    const { detailResult } = this.data;
+    const images = detailResult?.images || [];
+    if (!detailResult || !images.length) {
+      wx.showToast({
+        title: "当前作品没有图片资源",
+        icon: "none",
+      });
+      return;
+    }
+
+    this.setData({
+      activeSaveAction: "all",
+    });
+    this.resetDownloadProgress();
+
+    try {
+      this.setLoading(true, "正在检查相册权限");
+      await this.ensureAlbumPermission();
+
+      for (let index = 0; index < images.length; index += 1) {
+        const image = images[index];
+        const current = index + 1;
+
+        this.setData({
+          downloadProgressVisible: true,
+          downloadProgress: Math.floor((index / images.length) * 100),
+          downloadProgressText: `正在处理第 ${current}/${images.length} 张`,
+        });
+
+        this.setLoading(true, `正在下载第 ${current} 张图片`);
+        const downloadRes = await this.downloadAndSaveImage(detailResult, image.id);
+
+        this.setLoading(true, `正在保存第 ${current} 张图片`);
+        await this.saveToAlbum(downloadRes.tempFilePath, "note");
+      }
+
+      this.setData({
+        downloadProgressVisible: true,
+        downloadProgress: 100,
+        downloadProgressText: `已完成 ${images.length} 张图片下载与保存`,
+      });
+
+      wx.showToast({
+        title: `已保存 ${images.length} 张图片`,
+        icon: "success",
+      });
+    } catch (error) {
+      wx.showToast({
+        title: error?.message || "批量保存失败，请稍后重试",
+        icon: "none",
+      });
+    } finally {
+      this.setLoading(false);
+      this.setData({
+        activeSaveAction: "",
+      });
       setTimeout(() => {
         this.resetDownloadProgress();
       }, 800);
@@ -657,17 +807,19 @@ Page({
 
     realtimeLog.info("open_setting_result", {
       reason,
-      permission: typeof permissionAfterSetting === "undefined"
-        ? "undefined"
-        : String(permissionAfterSetting),
+      permission:
+        typeof permissionAfterSetting === "undefined"
+          ? "undefined"
+          : String(permissionAfterSetting),
     });
 
     if (!permissionAfterSetting) {
       realtimeLog.warn("open_setting_not_granted", {
         reason,
-        permission: typeof permissionAfterSetting === "undefined"
-          ? "undefined"
-          : String(permissionAfterSetting),
+        permission:
+          typeof permissionAfterSetting === "undefined"
+            ? "undefined"
+            : String(permissionAfterSetting),
       });
       throw new Error("未开启相册权限，无法保存到相册");
     }

@@ -143,6 +143,10 @@
   background: #eff4ef;
 }
 
+.preview-frame-image {
+  padding: 0;
+}
+
 .preview-media {
   width: 100%;
   height: 268rpx;
@@ -150,6 +154,19 @@
 
 .image-fit {
   height: 268rpx;
+}
+
+.image-swiper {
+  width: 100%;
+  height: 268rpx;
+}
+
+.image-slide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
 .play-button {
@@ -208,6 +225,13 @@
   white-space: nowrap;
 }
 
+.swipe-hint {
+  margin-top: 2rpx;
+  font-size: 22rpx;
+  color: #90a093;
+  text-align: center;
+}
+
 .selector-track {
   display: inline-flex;
   padding-bottom: 6rpx;
@@ -249,6 +273,10 @@
   margin-top: 8rpx;
   padding: 0 16rpx 16rpx;
   padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
+}
+
+.action-row {
+  display: flex;
 }
 
 .progress-card {
@@ -293,4 +321,26 @@
   width: 100%;
   background: linear-gradient(180deg, #16c45f 0%, #10b155 100%);
   color: #ffffff;
+}
+
+.secondary-btn,
+.action-btn {
+  flex: 1;
+}
+
+.secondary-btn {
+  margin-right: 12rpx;
+}
+
+.secondary-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 72rpx;
+  border-radius: 20rpx;
+  border: 2rpx solid rgba(19, 183, 91, 0.22);
+  background: #f7fbf7;
+  color: #14a854;
+  font-size: 24rpx;
+  font-weight: 600;
 }

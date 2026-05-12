@@ -13,7 +13,7 @@
   <view class="top-actions">
     <button class="light-btn" bindtap="onClearInputTap">清空链接</button>
     <button class="light-btn" bindtap="onPasteTap">一键粘贴</button>
-    <button class="solid-btn" loading="{{loading}}" disabled="{{loading}}" bindtap="onReExtractTap">重新提取</button>
+    <button class="solid-btn" loading="{{loading && activeSaveAction === ''}}" disabled="{{loading}}" bindtap="onReExtractTap">重新提取</button>
   </view>
 
   <view class="result-card">
@@ -54,14 +54,26 @@
       </view>
 
       <view wx:if="{{resultTab === 'image'}}" class="tab-panel">
-        <view class="preview-frame" bindtap="onPreviewPrimaryMedia">
-          <image class="preview-media image-fit" mode="aspectFit" src="{{selectedImagePreview || detailResult.cover}}" />
+        <view class="preview-frame preview-frame-image">
+          <swiper
+            class="image-swiper"
+            circular="{{detailResult.images.length > 1}}"
+            current="{{selectedImageCurrent}}"
+            bindchange="onImageSwiperChange"
+          >
+            <swiper-item wx:for="{{detailResult.images}}" wx:key="id">
+              <view class="image-slide" bindtap="onPreviewPrimaryMedia">
+                <image class="preview-media image-fit" mode="aspectFit" src="{{item.url || item.downloadUrl || detailResult.cover}}" />
+              </view>
+            </swiper-item>
+          </swiper>
         </view>
         <view class="chip-row">
           <view class="info-chip">图片作品</view>
           <view class="info-chip">{{selectedImageIndexText || '第 1 张'}}</view>
           <view class="info-chip info-chip-ghost">{{detailResult.images.length}} 张可选</view>
         </view>
+        <view class="swipe-hint">左右滑动切换图片</view>
         <scroll-view class="selector-scroll" scroll-x="true" enable-flex="true">
           <view class="selector-track">
             <view
@@ -99,8 +111,34 @@
         </view>
         <view class="progress-text">{{downloadProgressText}}</view>
       </view>
-      <button class="primary-btn" loading="{{loading}}" disabled="{{loading}}" bindtap="onSaveTap">
-        {{loading ? loadingText : (detailResult.mediaType === 'video' ? '保存视频' : '保存图片')}}
+
+      <view wx:if="{{detailResult.mediaType === 'note'}}" class="action-row">
+        <button
+          class="secondary-btn"
+          loading="{{loading && activeSaveAction === 'current'}}"
+          disabled="{{loading}}"
+          bindtap="onSaveCurrentImageTap"
+        >
+          {{loading && activeSaveAction === 'current' ? loadingText : '下载当前图片'}}
+        </button>
+        <button
+          class="primary-btn action-btn"
+          loading="{{loading && activeSaveAction === 'all'}}"
+          disabled="{{loading}}"
+          bindtap="onSaveAllImagesTap"
+        >
+          {{loading && activeSaveAction === 'all' ? loadingText : '下载全部图片'}}
+        </button>
+      </view>
+
+      <button
+        wx:if="{{detailResult.mediaType !== 'note'}}"
+        class="primary-btn"
+        loading="{{loading && activeSaveAction === 'video'}}"
+        disabled="{{loading}}"
+        bindtap="onSaveTap"
+      >
+        {{loading && activeSaveAction === 'video' ? loadingText : '保存视频'}}
       </button>
     </view>
   </view>
