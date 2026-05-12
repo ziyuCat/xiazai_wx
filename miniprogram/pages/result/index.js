@@ -72,8 +72,64 @@ function buildQualityText(source) {
   return "默认源";
 }
 
-function normalizeDetailResult(detailResult) {
-  const sources = Array.isArray(detailResult?.sources) ? detailResult.sources : [];
+function isDouyinWork(parseResult, detailResult) {
+  const platform = (parseResult?.platform || "").toLowerCase();
+  if (platform) {
+    return platform === "douyin";
+  }
+
+  const urls = [
+    parseResult?.resolved?.finalUrl,
+    detailResult?.sharePage?.sourceUrl,
+    detailResult?.sharePage?.pageUrl,
+  ].filter(Boolean);
+
+  return urls.some((url) => /douyin\.com|iesdouyin\.com/.test(url));
+}
+
+function isLikelyNoWatermarkSource(source) {
+  const label = `${source?.label || ""}`.toLowerCase();
+  const id = `${source?.id || ""}`.toLowerCase();
+  const watermark = `${source?.watermark || ""}`.toLowerCase();
+
+  return (
+    label.includes("no-watermark") ||
+    label.includes("nowm") ||
+    label.includes("无水印") ||
+    id.includes("no_watermark") ||
+    id.includes("nowm") ||
+    watermark === "without_watermark" ||
+    watermark === "unknown"
+  );
+}
+
+function buildSourceDisplayLabel(source, parseResult, detailResult) {
+  if (!source) {
+    return "";
+  }
+
+  if (!isDouyinWork(parseResult, detailResult)) {
+    return source.label || "";
+  }
+
+  if (isLikelyNoWatermarkSource(source)) {
+    return source?.watermark === "without_watermark" ? "去水印源" : "去水印源（推测）";
+  }
+
+  if (`${source?.watermark || ""}`.toLowerCase() === "with_watermark") {
+    return "默认源（有水印）";
+  }
+
+  return "默认源";
+}
+
+function normalizeDetailResult(detailResult, parseResult) {
+  const sources = Array.isArray(detailResult?.sources)
+    ? detailResult.sources.map((source) => ({
+        ...source,
+        displayLabel: buildSourceDisplayLabel(source, parseResult, detailResult),
+      }))
+    : [];
   const images = Array.isArray(detailResult?.images) ? detailResult.images : [];
   const cover = detailResult?.cover || images[0]?.downloadUrl || images[0]?.url || "";
   const durationMs =
@@ -141,7 +197,7 @@ Page({
   },
 
   applyWorkData({ inputText, parseResult, detailResult }) {
-    const normalizedDetail = normalizeDetailResult(detailResult);
+    const normalizedDetail = normalizeDetailResult(detailResult, parseResult);
     const selectedSourceMeta = this.getDefaultSource(normalizedDetail);
     const selectedImage = normalizedDetail.images[0] || null;
 
@@ -177,18 +233,7 @@ Page({
       return null;
     }
 
-    return (
-      sources.find((item) => {
-        const label = item?.label || "";
-        const id = item?.id || "";
-        return (
-          label.includes("无水印") ||
-          id.includes("nowm") ||
-          item?.watermark === "without_watermark" ||
-          item?.watermark === "unknown"
-        );
-      }) || sources[0]
-    );
+    return sources.find((item) => isLikelyNoWatermarkSource(item)) || sources[0];
   },
 
   buildStatisticsText(statistics) {

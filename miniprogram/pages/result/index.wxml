@@ -35,7 +35,7 @@
           <view class="info-chip info-chip-ghost">{{selectedSourceIndexText || '源信息'}}</view>
         </view>
         <view class="source-summary" bindtap="onToggleSourcePanel">
-          <view class="source-summary-text">当前数据源：{{selectedSourceMeta ? selectedSourceMeta.label : '默认源'}}</view>
+          <view class="source-summary-text">当前数据源：{{selectedSourceMeta ? (selectedSourceMeta.displayLabel || selectedSourceMeta.label) : '默认源'}}</view>
           <view class="source-summary-action">{{sourcePanelExpanded ? '收起' : '展开'}}</view>
         </view>
         <scroll-view wx:if="{{sourcePanelExpanded}}" class="selector-scroll" scroll-x="true" enable-flex="true">
@@ -47,7 +47,7 @@
               data-id="{{item.id}}"
               bindtap="onSelectSource"
             >
-              {{item.label}}
+              {{item.displayLabel || item.label}}
             </view>
           </view>
         </scroll-view>
