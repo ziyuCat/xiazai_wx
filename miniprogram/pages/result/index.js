@@ -123,6 +123,14 @@ function buildSourceDisplayLabel(source, parseResult, detailResult) {
   return "默认源";
 }
 
+function getPreferredImageUrl(image) {
+  if (!image) {
+    return "";
+  }
+
+  return image.url || image.downloadUrl || "";
+}
+
 function normalizeDetailResult(detailResult, parseResult) {
   const sources = Array.isArray(detailResult?.sources)
     ? detailResult.sources.map((source) => ({
@@ -131,7 +139,7 @@ function normalizeDetailResult(detailResult, parseResult) {
       }))
     : [];
   const images = Array.isArray(detailResult?.images) ? detailResult.images : [];
-  const cover = detailResult?.cover || images[0]?.downloadUrl || images[0]?.url || "";
+  const cover = detailResult?.cover || getPreferredImageUrl(images[0]) || "";
   const durationMs =
     detailResult?.durationMs ||
     sources[0]?.durationMs ||
@@ -216,8 +224,7 @@ Page({
         selectedSourceMeta?.id || ""
       ),
       selectedImageId: selectedImage?.id || "",
-      selectedImagePreview:
-        selectedImage?.downloadUrl || selectedImage?.url || normalizedDetail.cover || "",
+      selectedImagePreview: getPreferredImageUrl(selectedImage) || normalizedDetail.cover || "",
       selectedImageIndexText: this.buildImageIndexText(normalizedDetail, selectedImage?.id || ""),
       sourcePanelExpanded: false,
       downloadTicket: null,
@@ -413,9 +420,7 @@ Page({
   onPreviewPrimaryMedia() {
     if (this.data.resultTab === "image") {
       const current = this.data.selectedImagePreview;
-      const images = (this.data.detailResult?.images || [])
-        .map((item) => item.downloadUrl || item.url)
-        .filter(Boolean);
+      const images = (this.data.detailResult?.images || []).map(getPreferredImageUrl).filter(Boolean);
 
       if (!current || !images.length) {
         return;
@@ -465,10 +470,22 @@ Page({
     this.resetDownloadProgress();
 
     try {
-      const ticket = await prepareDownload(
-        detailResult,
-        detailResult.mediaType === "video" ? selectedSourceId : selectedImageId
-      );
+      let ticket = null;
+      let downloadUrl = "";
+
+      if (detailResult.mediaType === "note") {
+        const selectedImage =
+          (detailResult.images || []).find((item) => item.id === selectedImageId) || null;
+        downloadUrl = getPreferredImageUrl(selectedImage);
+      }
+
+      if (!downloadUrl) {
+        ticket = await prepareDownload(
+          detailResult,
+          detailResult.mediaType === "video" ? selectedSourceId : selectedImageId
+        );
+        downloadUrl = ticket.downloadUrl;
+      }
 
       this.setData({
         downloadTicket: ticket,
@@ -478,7 +495,21 @@ Page({
       await this.ensureAlbumPermission();
 
       this.setLoading(true, "正在下载资源");
-      const downloadRes = await this.downloadWithProgress(ticket.downloadUrl);
+      let downloadRes;
+      try {
+        downloadRes = await this.downloadWithProgress(downloadUrl);
+      } catch (error) {
+        const canFallbackToTicket = detailResult.mediaType === "note" && downloadUrl && !ticket;
+        if (!canFallbackToTicket) {
+          throw error;
+        }
+
+        ticket = await prepareDownload(detailResult, selectedImageId);
+        this.setData({
+          downloadTicket: ticket,
+        });
+        downloadRes = await this.downloadWithProgress(ticket.downloadUrl);
+      }
 
       this.setLoading(true, "正在保存到相册");
       await this.saveToAlbum(downloadRes.tempFilePath, detailResult.mediaType);
